@@ -109,7 +109,7 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
 
 - (void)performZoomingAnimationWithTransitionContext:(id <UIViewControllerContextTransitioning>)transitionContext {
     UIView *containerView = transitionContext.containerView;
-    
+        
     // Create a brand new view with the same contents for the purposes of animating this new view and leaving the old one alone.
     UIView *startingViewForAnimation = self.startingViewForAnimation;
     if (!startingViewForAnimation) {
@@ -121,8 +121,11 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
         endingViewForAnimation = [[self class] newAnimationViewFromView:self.endingView];
     }
     
+    endingViewForAnimation.transform = CGAffineTransformConcat(endingViewForAnimation.transform, [NYTOperatingSystemCompatibilityUtility fromViewForTransitionContext:transitionContext].transform);
+    startingViewForAnimation.transform = CGAffineTransformConcat(startingViewForAnimation.transform, [NYTOperatingSystemCompatibilityUtility fromViewForTransitionContext:transitionContext].transform);
+    
     CGFloat endingViewInitialTransform = CGRectGetHeight(startingViewForAnimation.frame) / CGRectGetHeight(endingViewForAnimation.frame);
-    CGPoint translatedStartingViewCenter = [[self class] centerPointForView:self.startingView translatedToContainerView:containerView];
+    CGPoint translatedStartingViewCenter = [[self class] centerPointForView:self.startingView translatedToContainerView:containerView transitionContext:nil];
     
     startingViewForAnimation.center = translatedStartingViewCenter;
     
@@ -149,11 +152,11 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
     }];
     
     CGFloat startingViewFinalTransform = 1.0 / endingViewInitialTransform;
-    CGPoint translatedEndingViewFinalCenter = [[self class] centerPointForView:self.endingView translatedToContainerView:containerView];
+    CGPoint translatedEndingViewFinalCenter = [[self class] centerPointForView:self.endingView translatedToContainerView:containerView transitionContext:transitionContext];
     
     // Zoom animation
     [UIView animateWithDuration:[self transitionDuration:transitionContext] delay:0 usingSpringWithDamping:self.zoomingAnimationSpringDamping initialSpringVelocity:0.0 options:UIViewAnimationOptionAllowAnimatedContent | UIViewAnimationOptionBeginFromCurrentState animations:^{
-        endingViewForAnimation.transform = self.endingView.transform;
+        endingViewForAnimation.transform = CGAffineTransformConcat([NYTOperatingSystemCompatibilityUtility toViewForTransitionContext:transitionContext].transform, self.endingView.transform);
         endingViewForAnimation.center = translatedEndingViewFinalCenter;
         
         startingViewForAnimation.transform = CGAffineTransformScale(startingViewForAnimation.transform, startingViewFinalTransform, startingViewFinalTransform);
@@ -165,6 +168,25 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
         
         [self completeTransitionWithTransitionContext:transitionContext];
     }];
+}
+
+#define DegreesToRadians(degrees) (degrees * M_PI / 180)
+
+- (CGAffineTransform)transformForOrientation:(UIInterfaceOrientation)orientation {
+    switch (orientation) {
+        case UIInterfaceOrientationLandscapeLeft:
+            return CGAffineTransformMakeRotation(-DegreesToRadians(90));
+        
+        case UIInterfaceOrientationLandscapeRight:
+            return CGAffineTransformMakeRotation(DegreesToRadians(90));
+        
+        case UIInterfaceOrientationPortraitUpsideDown:
+            return CGAffineTransformMakeRotation(DegreesToRadians(180));
+        
+        case UIInterfaceOrientationPortrait:
+        default:
+            return CGAffineTransformMakeRotation(DegreesToRadians(0));
+    }
 }
 
 #pragma mark - Convenience
@@ -186,8 +208,12 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
     [transitionContext completeTransition:!transitionContext.transitionWasCancelled];
 }
 
-+ (CGPoint)centerPointForView:(UIView *)view translatedToContainerView:(UIView *)containerView {
++ (CGPoint)centerPointForView:(UIView *)view translatedToContainerView:(UIView *)containerView transitionContext:(id <UIViewControllerContextTransitioning>)transitionContext {
     CGPoint centerPoint = view.center;
+    
+//    if (transitionContext) {
+//        centerPoint = CGPointApplyAffineTransform(centerPoint, CGAffineTransformInvert([transitionContext viewControllerForKey:UITransitionContextToViewControllerKey].view.transform));
+//    }
     
     // Special case for zoomed scroll views.
     if ([view.superview isKindOfClass:[UIScrollView class]]) {
@@ -226,6 +252,7 @@ const CGFloat NYTPhotoTransitionAnimatorSpringDamping = 0.85;
 #pragma mark - UIViewControllerAnimatedTransitioning
 
 - (NSTimeInterval)transitionDuration:(id <UIViewControllerContextTransitioning>)transitionContext {
+    return 10;
     if (self.shouldPerformZoomingAnimation) {
         return self.animationDurationWithZooming;
     }
